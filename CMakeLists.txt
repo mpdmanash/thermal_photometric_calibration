@@ -47,16 +47,5 @@ target_link_libraries (main ${OpenCV_LIBRARIES}
                                 ${CERES_LIBRARIES}
                                 ${OPENMP_LIBRARIES})
 
-# add_executable (demo demo.cpp irPhotoCalib.cpp)
-# target_link_libraries (demo ${OpenCV_LIBRARIES}
-#                                 ${CERES_LIBRARIES}
-#                                 ${OPENMP_LIBRARIES})
-                                
-# add_executable (demo_loop demo_loop.cpp irPhotoCalib.cpp)
-# target_link_libraries (demo_loop ${OpenCV_LIBRARIES}
-#                                 ${CERES_LIBRARIES}
-#                                 ${OPENMP_LIBRARIES}
-#                                 ${Boost_LIBRARIES})
-
 add_executable (gray2jet gray2jet.cpp)
 target_link_libraries (gray2jet ${OpenCV_LIBRARIES})
