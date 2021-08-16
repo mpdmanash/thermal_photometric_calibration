@@ -9,7 +9,6 @@ set (CMAKE_CXX_STANDARD 11)
 find_package(OpenCV REQUIRED)
 find_package( Boost COMPONENTS system filesystem REQUIRED )
 
-#set(CMAKE_FRAMEWORK_PATH /home/manash/packages/eigen-3.2.9/build/install/share/eigen3/cmake)
 find_package(Ceres REQUIRED)
 
 OPTION (USE_OpenMP "Use OpenMP" ON)

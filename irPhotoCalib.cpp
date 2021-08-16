@@ -114,13 +114,74 @@ class newSinglePairGainAnaJCostFunc
   const vector<float> o, op;
 };
 
-IRPhotoCalib::IRPhotoCalib()
+IRPhotoCalib::IRPhotoCalib(bool useKeyframes)
 {
-  e_photo_error = 0.00019142419;
+  m_useKeyframes = useKeyframes;
+  m_frame_id = 0;
+  m_latest_KF_id = 0;
+  PTAB first_frame_params; first_frame_params.a = 1.0; first_frame_params.b = 0.0;
+  m_params_PT.push_back(first_frame_params);
+  m_epsilon_gap = 0.1;
+  m_epsilon_base = 0.4;
 }
 
 IRPhotoCalib::~IRPhotoCalib()
 {
+}
+
+PTAB IRPhotoCalib::getPrevAB()
+{
+  if (m_useKeyframes) return m_params_PT[m_latest_KF_id];
+  else return m_params_PT[m_frame_id];
+}
+
+void IRPhotoCalib::getRelativeGains(double a1, double b1, double a2, double b2, double & a12, double & b12){
+  double e12 = (a2-b2)/(a1-b1);
+  b12 = (b2-b1)/(a1-b1);
+  a12 = e12 + b12;
+}
+
+void IRPhotoCalib::chainGains(double a01, double b01, double a12, double b12, double & a02, double & b02){
+  double e02 = (a01-b01) * (a12 - b12);
+  b02 = b01+(a01-b01)*b12;
+  a02 = e02 + b02;
+}
+
+PTAB IRPhotoCalib::ProcessCurrentFrame(vector<vector<float> > intensity_history, 
+                                       vector<vector<float> > intensity_current, 
+                                       vector<int> frame_ids_history, bool thisKF)
+{
+  // Match this frame with previous frames
+  PTAB prevAB = getPrevAB(); 
+  double a_origin_previous = prevAB.a; double b_origin_previous = prevAB.b;
+  double w_a = 0; double w_b = 0; int w_count = 0;
+  for(int i=0; i<intensity_history.size(); i++){
+      vector<int> prev_inliers, inliers;
+      double a_history_current, b_history_current, a_origin_current, b_origin_current, a_previous_current, b_previous_current;
+      int support_points = EstimateGainsRansac(intensity_history[i], intensity_current[i], a_history_current, b_history_current);
+      double a_origin_history = m_params_PT[m_frame_id+1-frame_ids_history[i]].a; double b_origin_history = m_params_PT[m_frame_id+1-frame_ids_history[i]].b;
+      chainGains(a_origin_history, b_origin_history, a_history_current, b_history_current, a_origin_current, b_origin_current);
+      getRelativeGains(a_origin_previous, b_origin_previous, a_origin_current, b_origin_current, a_previous_current, b_previous_current); // May be only do it previous key frame and not previour frame
+      w_a += a_previous_current*support_points; w_b += b_previous_current*support_points; w_count += support_points;
+  }
+  double w_a_previous_current = w_a/w_count; double w_b_previous_current = w_b/w_count;
+  if (w_count<5){w_a_previous_current=1.0; w_b_previous_current=0.0;} // in case, we do not have enough correspondence to estimate AB
+
+  // Drift adjustment
+  double delta = (1.0 - (w_a_previous_current-w_b_previous_current)) * m_epsilon_gap;
+  w_a_previous_current = w_a_previous_current + delta;
+  w_b_previous_current = w_b_previous_current - delta;
+  w_a_previous_current = w_a_previous_current -(w_a_previous_current-1.0)*m_epsilon_base;
+  w_b_previous_current = w_b_previous_current -(w_b_previous_current)*m_epsilon_base;
+
+  double a_origin_current, b_origin_current;
+  chainGains(a_origin_previous, b_origin_previous, w_a_previous_current, w_b_previous_current, a_origin_current, b_origin_current);
+  
+  m_frame_id++;
+  if(thisKF) m_latest_KF_id = m_frame_id;
+  PTAB this_frame_params; this_frame_params.a = a_origin_current; this_frame_params.b = b_origin_current;
+  m_params_PT.push_back(this_frame_params);
+  return this_frame_params;
 }
 
 int IRPhotoCalib::EstimateGainsRansac(vector<float> oi, vector<float> opip,
@@ -136,7 +197,7 @@ int IRPhotoCalib::EstimateGainsRansac(vector<float> oi, vector<float> opip,
 
   double best_aip, best_bip; vector<double> found_aips; vector<double> found_bips;
   int most_inliers = 0; vector<int> best_inliers; vector<int> best_outliers;
-  for(int rsi=0; rsi<oi.size()*4; rsi++)
+  for(int rsi=0; rsi<oi.size()*0.5; rsi++)
   {
     std::shuffle(pickid.begin(), pickid.end(), g);
     vector<float> this_o, this_op;
@@ -215,10 +276,4 @@ float IRPhotoCalib::getGainCorrected(float o, int x, int y, vector< double >& a,
   double ai = a[fid]; double bi = b[fid];
   float co = (o*exp(ai)+bi);
   return co;
-}
-
-void IRPhotoCalib::getRelativeGains(double a1, double b1, double a2, double b2, double & a12, double & b12){
-  double e12 = (a2-b2)/(a1-b1);
-  b12 = (b2-b1)/(a1-b1);
-  a12 = e12 + b12;
 }
