@@ -32,6 +32,8 @@
 #include <iterator>
 #include <string>
 
+typedef Eigen::SparseMatrix<double, Eigen::ColMajor> SpMat;
+typedef Eigen::Triplet<double> T;
 
 //#define M_PI 3.14159265
 using namespace std;
@@ -44,11 +46,13 @@ struct PTAB{
 
 class IRPhotoCalib{
 public:
-    IRPhotoCalib(bool useKeyframes=true);
+    IRPhotoCalib(int w, int h, int k_div, float k_calibrate_SP, float k_SP_threshold, bool useKeyframes=true);
     ~IRPhotoCalib();
     PTAB ProcessCurrentFrame(vector<vector<float> > intensity_history,
                              vector<vector<float> > intensity_current, 
-                             vector<int> frame_ids_history, bool thisKF=false);
+                             vector<int> frame_ids_history, 
+                             vector<vector<pair<int,int> > > pixels_history,
+                             vector<vector<pair<int,int> > > pixels_current, bool thisKF=false);
     int EstimateGainsRansac(vector<float> oi, vector<float> oip,
                             double &out_aip, double &out_bip);
     float getCorrected(float o, int x, int y, vector<double> &a, vector<double> &b, vector<double> &s, vector<double> &n, int fid, int w, int h, int div, Mat &imNis, double minn, double maxn);
@@ -57,13 +61,20 @@ public:
     void chainGains(double a01, double b01, double a12, double b12, double & a02, double & b02);
     double e_photo_error;
 private:
-    bool m_useKeyframes;
+    bool m_useKeyframes, m_calibrate_SP;
     vector<PTAB> m_params_PT;
     vector<int> m_KF_ids;
-    int m_latest_KF_id;
-    int m_frame_id;
+    int m_latest_KF_id, m_frame_id, m_div, m_w, m_h;
     double m_epsilon_gap, m_epsilon_base;
+    float m_SP_threshold;
+    Mat m_spatial_coverage;
     PTAB getPrevAB();
+    int getNid(int ptx, int pty);
+    void EstimateSpatialParameters();
+
+    // Spatial Parameters
+    vector<double> m_SP_vecB;
+    vector<int> m_SP_correscount, m_sids_history, m_sids_current; int m_SP_max_correscount;
 };
 
 #endif

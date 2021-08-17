@@ -22,14 +22,16 @@
 #include <random>
 #include <algorithm>
 #include <iterator>
+#include <math.h>
 
 using namespace std;
 using namespace cv;
 
 // Config sets
-const int k_o_ws = 8;
 const int k_frame_history = 10;
 int k_div = 8;
+float k_SP_threshold = 0.9;
+bool k_calibrate_SP = true;
 int k_max_corres_per_frame = 300; //600 in general, but lesser 20 or 30 for spatial
 int k_max_corres_per_history = 30;
 int k_min_corres_per_history = 4;
@@ -37,14 +39,19 @@ int k_min_corres_per_history = 4;
 void ReadCorrespondences(string csv_filename, 
                          vector<vector<vector<float> > > & all_intensity_history,
                          vector<vector<vector<float> > > & all_intensity_current,
-                         vector<vector<int> > & all_history_frame_diffs){
-    all_intensity_history.clear(); all_intensity_current.clear(); all_history_frame_diffs.clear();
+                         vector<vector<int> > & all_history_frame_diffs,
+                         vector<vector<vector<pair<int,int> > > > & all_pixels_history,
+                         vector<vector<vector<pair<int,int> > > > & all_pixels_current){
+    all_intensity_history.clear(); all_intensity_current.clear(); all_history_frame_diffs.clear(); all_pixels_history.clear(); all_pixels_current.clear();
     ifstream c_file (csv_filename); string value;
     int prev_CFID = 1; int columns = 9; int prev_HKFID = -1;
     vector<vector<float> > CFID_intensity_history, CFID_intensity_current;
+    vector<vector<pair<int,int> > > CFID_pixels_history, CFID_pixels_current;
     vector<int> CFID_history_frame_diffs;
     vector<float> CFID_HKFID_intensity_history, CFID_HKFID_intensity_current;
+    vector<pair<int,int> > CFID_HKFID_pixels_history, CFID_HKFID_pixels_current;
     bool done_all_lines = false;
+    int x_history = 0; int x_current = 0;
     while ( c_file.good() ){
         for(int i=0; i<columns-1; i++){
             getline ( c_file, value, ',' );
@@ -57,11 +64,17 @@ void ReadCorrespondences(string csv_filename,
                             CFID_intensity_history.push_back(CFID_HKFID_intensity_history);
                             CFID_intensity_current.push_back(CFID_HKFID_intensity_current);
                             CFID_history_frame_diffs.push_back(prev_HKFID);
+                            CFID_pixels_history.push_back(CFID_HKFID_pixels_history);
+                            CFID_pixels_current.push_back(CFID_HKFID_pixels_current);
                             CFID_HKFID_intensity_history.clear(); CFID_HKFID_intensity_current.clear();
+                            CFID_HKFID_pixels_history.clear(); CFID_HKFID_pixels_current.clear();
                             all_intensity_history.push_back(CFID_intensity_history);
                             all_intensity_current.push_back(CFID_intensity_current);
                             all_history_frame_diffs.push_back(CFID_history_frame_diffs);
+                            all_pixels_history.push_back(CFID_pixels_history);
+                            all_pixels_current.push_back(CFID_pixels_current);
                             CFID_intensity_history.clear(); CFID_intensity_current.clear(); CFID_history_frame_diffs.clear();
+                            CFID_pixels_history.clear(); CFID_pixels_current.clear();
                             prev_HKFID=-1;
                         }
                         prev_CFID = CFID;
@@ -74,7 +87,10 @@ void ReadCorrespondences(string csv_filename,
                             CFID_intensity_history.push_back(CFID_HKFID_intensity_history);
                             CFID_intensity_current.push_back(CFID_HKFID_intensity_current);
                             CFID_history_frame_diffs.push_back(prev_HKFID);
+                            CFID_pixels_history.push_back(CFID_HKFID_pixels_history);
+                            CFID_pixels_current.push_back(CFID_HKFID_pixels_current);
                             CFID_HKFID_intensity_history.clear(); CFID_HKFID_intensity_current.clear();
+                            CFID_HKFID_pixels_history.clear(); CFID_HKFID_pixels_current.clear();
                             CFID_history_frame_diffs.push_back(HKFID);
                         }
                         prev_HKFID = HKFID;
@@ -92,6 +108,20 @@ void ReadCorrespondences(string csv_filename,
                         CFID_HKFID_intensity_current.push_back(o_current);
                     }
                     break;
+                case 4 : {x_history = (int)round(stof(value)); break;}
+                case 5 :
+                    {
+                        int y_history = (int)round(stof(value));
+                        CFID_HKFID_pixels_history.push_back(make_pair(x_history, y_history));
+                    }
+                    break;
+                case 6 : {x_current = (int)round(stof(value)); break;}
+                case 7 :
+                    {
+                        int y_current = (int)round(stof(value));
+                        CFID_HKFID_pixels_current.push_back(make_pair(x_current, y_current));
+                    }
+                    break;
             }
         }
         if (!done_all_lines) getline ( c_file, value);
@@ -99,9 +129,13 @@ void ReadCorrespondences(string csv_filename,
             CFID_intensity_history.push_back(CFID_HKFID_intensity_history);
             CFID_intensity_current.push_back(CFID_HKFID_intensity_current);
             CFID_history_frame_diffs.push_back(prev_HKFID);
+            CFID_pixels_history.push_back(CFID_HKFID_pixels_history);
+            CFID_pixels_current.push_back(CFID_HKFID_pixels_current);
             all_intensity_history.push_back(CFID_intensity_history);
             all_intensity_current.push_back(CFID_intensity_current);
             all_history_frame_diffs.push_back(CFID_history_frame_diffs);
+            all_pixels_history.push_back(CFID_pixels_history);
+            all_pixels_current.push_back(CFID_pixels_current);
         }
     }
 }
@@ -129,33 +163,31 @@ int main(int argc, char **argv){
         return 1;
     }
     int frame_counter = 0;
-    Mat prev_frame, frame_3, frame;
+    Mat prev_frame, frame_3, frame, corrected_frame, res;
 
     // ===== Read Correspondences
     vector<vector<vector<float> > > all_intensity_history, all_intensity_current;
     vector<vector<int> > all_history_frame_diffs;
-    ReadCorrespondences(correspondence_path, all_intensity_history, all_intensity_current, all_history_frame_diffs);
+    vector<vector<vector<pair<int,int> > > > all_pixels_history, all_pixels_current;
+    ReadCorrespondences(correspondence_path, all_intensity_history, all_intensity_current, all_history_frame_diffs, all_pixels_history, all_pixels_current);
 
     // ===== Setup for IRPC =================================================
-    IRPhotoCalib calib(false);
+    IRPhotoCalib * calib;
     vector<int> ptx, pty, pptx, ppty, id, idp; 
     vector<float> o, op;
     while(video_in.isOpened()){
         video_in >> frame_3;
         if(frame_3.empty()) continue;
-        cvtColor(frame_3, frame, CV_BGR2GRAY);
-        
+        cvtColor(frame_3, frame, CV_BGR2GRAY);        
         if (frame_counter>=1){
-            PTAB current_params = calib.ProcessCurrentFrame(all_intensity_history[frame_counter-1], all_intensity_current[frame_counter-1], all_history_frame_diffs[frame_counter-1]);
-            Mat corrected_frame = frame * (current_params.a-current_params.b) + current_params.b;
-            Mat res;
-            hconcat(frame, corrected_frame, res);
-            imshow(video_name, res);
-            waitKey(1);
+            PTAB current_params = calib->ProcessCurrentFrame(all_intensity_history[frame_counter-1], all_intensity_current[frame_counter-1], all_history_frame_diffs[frame_counter-1],
+                                                             all_pixels_history[frame_counter-1], all_pixels_current[frame_counter-1], frame.cols);
+            corrected_frame = frame * (current_params.a-current_params.b) + current_params.b;
         }
-        else{
-
-        }
+        else {corrected_frame = frame.clone(); calib = new IRPhotoCalib(frame.cols,frame.rows,k_div,k_calibrate_SP,k_SP_threshold,false);}
+        hconcat(frame, corrected_frame, res);
+        imshow(video_name, res);
+        waitKey(1);
         frame_counter++;
     }
 }
