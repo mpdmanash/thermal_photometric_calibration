@@ -48,7 +48,7 @@ public:
     ~IRPhotoCalib();
     PTAB ProcessCurrentFrame(vector<vector<float> > intensity_history,
                              vector<vector<float> > intensity_current, 
-                             vector<int> frame_ids_history, bool thisKF);
+                             vector<int> frame_ids_history, bool thisKF=false);
     int EstimateGainsRansac(vector<float> oi, vector<float> oip,
                             double &out_aip, double &out_bip);
     float getCorrected(float o, int x, int y, vector<double> &a, vector<double> &b, vector<double> &s, vector<double> &n, int fid, int w, int h, int div, Mat &imNis, double minn, double maxn);

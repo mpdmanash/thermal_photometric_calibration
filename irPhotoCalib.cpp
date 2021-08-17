@@ -156,6 +156,7 @@ PTAB IRPhotoCalib::ProcessCurrentFrame(vector<vector<float> > intensity_history,
   double a_origin_previous = prevAB.a; double b_origin_previous = prevAB.b;
   double w_a = 0; double w_b = 0; int w_count = 0;
   for(int i=0; i<intensity_history.size(); i++){
+      if (intensity_history[i].size()<=4) continue;
       vector<int> prev_inliers, inliers;
       double a_history_current, b_history_current, a_origin_current, b_origin_current, a_previous_current, b_previous_current;
       int support_points = EstimateGainsRansac(intensity_history[i], intensity_current[i], a_history_current, b_history_current);
@@ -197,7 +198,7 @@ int IRPhotoCalib::EstimateGainsRansac(vector<float> oi, vector<float> opip,
 
   double best_aip, best_bip; vector<double> found_aips; vector<double> found_bips;
   int most_inliers = 0; vector<int> best_inliers; vector<int> best_outliers;
-  for(int rsi=0; rsi<oi.size()*0.5; rsi++)
+  for(int rsi=0; rsi<oi.size(); rsi++)
   {
     std::shuffle(pickid.begin(), pickid.end(), g);
     vector<float> this_o, this_op;
