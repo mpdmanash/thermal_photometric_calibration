@@ -207,8 +207,11 @@ PTAB IRPhotoCalib::ProcessCurrentFrame(vector<vector<float> > intensity_history,
       }
     }
     float coverage_ratio = cv::sum(m_spatial_coverage)[0]/(m_spatial_coverage.rows*m_spatial_coverage.cols);
-    // cout << coverage_ratio << " coverage\n"; 
-    if(coverage_ratio > m_SP_threshold) this->EstimateSpatialParameters();
+
+    if(coverage_ratio > m_SP_threshold){
+      m_calibrate_SP = false;
+      std::async(std::launch::async, &IRPhotoCalib::EstimateSpatialParameters, this);
+    }
   }
 
   m_frame_id++;

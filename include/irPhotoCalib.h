@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <iterator>
 #include <string>
+#include <future>
 
 typedef Eigen::SparseMatrix<double, Eigen::ColMajor> SpMat;
 typedef Eigen::Triplet<double> T;
