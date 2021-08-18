@@ -9,9 +9,8 @@
 #include <iostream>
 #include <iomanip>
 
-#include "utils.h"
 #include "irPhotoCalib.h"
-#include<cstdlib>
+#include <cstdlib>
 #include <time.h>
 #include <dirent.h>
 #include <string>
@@ -141,10 +140,14 @@ void ReadCorrespondences(string csv_filename,
 }
 
 int main(int argc, char **argv){
-    CommandLineParser parser(argc, argv, "{@input_path |0|input path can be a camera id, like 0,1,2 or a video filename}");
+    cv::String keys =
+        "{@input_path |<none>           | Path to the video file}"         
+        "{@correspondence_path  |/path/to/file.xml| Path to the correspondence file}"
+        "{help   |      | show help message}";      // optional, show help optional
+    CommandLineParser parser(argc, argv, keys);
     parser.printMessage();
-    string input_path = "/media/kimsk/Seagate_Expansion/ECCV_Results/video.mp4"; //parser.get<string>(0);
-    string correspondence_path = "/media/kimsk/Seagate_Expansion/ECCV_Results/Correspondences.txt";
+    string input_path = parser.get<string>(0);
+    string correspondence_path = parser.get<string>(1);
     string video_name = input_path;
     namedWindow(video_name, WINDOW_NORMAL);
     VideoCapture video_in;
