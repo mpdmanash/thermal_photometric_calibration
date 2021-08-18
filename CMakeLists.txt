@@ -41,10 +41,7 @@ include_directories(${OpenCV_INCLUDE_DIRS}
                     ${Boost_INCLUDE_DIR}
                     include)
 
-add_executable (main main.cpp irPhotoCalib.cpp utils.h)
+add_executable (main main.cpp irPhotoCalib.cpp)
 target_link_libraries (main ${OpenCV_LIBRARIES}
                                 ${CERES_LIBRARIES}
                                 ${OPENMP_LIBRARIES})
-
-add_executable (gray2jet gray2jet.cpp)
-target_link_libraries (gray2jet ${OpenCV_LIBRARIES})

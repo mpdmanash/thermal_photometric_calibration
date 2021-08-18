@@ -22,8 +22,6 @@
 #include <Eigen/SparseCholesky>
 #include <Eigen/IterativeLinearSolvers>
 #include <Eigen/SparseLU>
-#include <Eigen/SparseQR>
-//#include<Eigen/SPQRSupport>
 #include <Eigen/OrderingMethods>
 #include <time.h>
 #include <sys/time.h>
@@ -31,7 +29,7 @@
 #include <algorithm>
 #include <iterator>
 #include <string>
-#include <future>
+#include <thread>
 
 typedef Eigen::SparseMatrix<double, Eigen::ColMajor> SpMat;
 typedef Eigen::Triplet<double> T;
@@ -56,8 +54,7 @@ public:
                              vector<vector<pair<int,int> > > pixels_current, bool thisKF=false);
     int EstimateGainsRansac(vector<float> oi, vector<float> oip,
                             double &out_aip, double &out_bip);
-    float getCorrected(float o, int x, int y, vector<double> &a, vector<double> &b, vector<double> &s, vector<double> &n, int fid, int w, int h, int div, Mat &imNis, double minn, double maxn);
-    float getGainCorrected(float o, int x, int y, vector<double> &a, vector<double> &b, vector<double> &s, vector<double> &n, int fid, int w, int h, int div);
+    Mat getCorrectedImage(Mat & image, PTAB & PT_params);
     void getRelativeGains(double a1, double b1, double a2, double b2, double & a12, double & b12);
     void chainGains(double a01, double b01, double a12, double b12, double & a02, double & b02);
     double e_photo_error;
@@ -68,10 +65,14 @@ private:
     int m_latest_KF_id, m_frame_id, m_div, m_w, m_h;
     double m_epsilon_gap, m_epsilon_base;
     float m_SP_threshold;
-    Mat m_spatial_coverage;
+    Mat m_spatial_coverage, m_params_PS, m_lut;
     PTAB getPrevAB();
     int getNid(int ptx, int pty);
+    std::pair<int, int> getInvNid(int sid);
     void EstimateSpatialParameters();
+    template <typename Derived>
+    Mat mapEigen2CV(const Eigen::MatrixBase<Derived>& M_Eigen);
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> mapCV2Eigen(Mat & M_OCV);
 
     // Spatial Parameters
     vector<double> m_SP_vecB;

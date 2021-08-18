@@ -118,10 +118,20 @@ IRPhotoCalib::IRPhotoCalib(int w, int h, int k_div, float k_calibrate_SP, float 
   m_w = w; m_h = h;
 
   // Spatial Params
-  m_spatial_coverage = Mat(cv::Size(((m_h/m_div)) * ((m_w/m_div)),1), CV_32FC1, Scalar(0));
+  m_spatial_coverage = Mat(cv::Size(((m_h/m_div)) * ((m_w/m_div)),1), CV_8UC1, Scalar(0));
+  m_spatial_coverage.at<uchar>(0,getNid((int)(w/2),(int)(h/2)));
+  m_params_PS = Mat(cv::Size(m_w, m_h), CV_32FC1, Scalar(0));
   m_calibrate_SP = k_calibrate_SP; m_SP_threshold = k_SP_threshold;
   m_SP_correscount = vector<int>((w*h)/(m_div*m_div),0);
-  m_SP_max_correscount = 10;
+  m_SP_max_correscount = 500;
+
+  m_lut = Mat(cv::Size(256,1), CV_8UC1, Scalar(0));
+  for(int i=0; i<256; i++)
+  {
+    if(i<128) m_lut.at<uchar>(0,i) = (uchar)i*2;
+    else if(i==128) m_lut.at<uchar>(0,i) = (uchar)255;
+    else m_lut.at<uchar>(0,i) = (uchar)(512-2*i);
+  }
 }
 
 IRPhotoCalib::~IRPhotoCalib()
@@ -148,6 +158,12 @@ void IRPhotoCalib::chainGains(double a01, double b01, double a12, double b12, do
 
 int IRPhotoCalib::getNid(int ptx, int pty){
   return (int)(std::floor(pty/m_div) * std::floor(m_w/m_div) + std::floor(ptx/m_div));
+}
+
+std::pair<int, int> IRPhotoCalib::getInvNid(int sid){
+  int pty = (int)(sid/(int)(std::floor(m_w/m_div)));
+  int ptx = (int)(sid%(int)(std::floor(m_w/m_div)));
+  return std::make_pair(ptx,pty);
 }
 
 PTAB IRPhotoCalib::ProcessCurrentFrame(vector<vector<float> > intensity_history, 
@@ -193,10 +209,11 @@ PTAB IRPhotoCalib::ProcessCurrentFrame(vector<vector<float> > intensity_history,
       for(int j=0; j<pixels_current[i].size(); j++){
         int sid_history = this->getNid(pixels_history[i][j].first, pixels_history[i][j].second);
         int sid_current = this->getNid(pixels_current[i][j].first, pixels_current[i][j].second);
-        if(sid_history==sid_current || (m_SP_correscount[sid_history] > m_SP_max_correscount && m_SP_correscount[sid_history] > m_SP_max_correscount)) continue;
+        if(sid_history==sid_current || 
+           (m_SP_correscount[sid_history] > m_SP_max_correscount && m_SP_correscount[sid_history] > m_SP_max_correscount)) continue;
         
-        m_spatial_coverage.at<float>(0,sid_history) = 1;
-        m_spatial_coverage.at<float>(0,sid_current) = 1;
+        m_spatial_coverage.at<uchar>(0,sid_history) = 1;
+        m_spatial_coverage.at<uchar>(0,sid_current) = 1;
 
         m_sids_history.push_back(sid_history);
         m_sids_current.push_back(sid_current);
@@ -207,10 +224,10 @@ PTAB IRPhotoCalib::ProcessCurrentFrame(vector<vector<float> > intensity_history,
       }
     }
     float coverage_ratio = cv::sum(m_spatial_coverage)[0]/(m_spatial_coverage.rows*m_spatial_coverage.cols);
-
     if(coverage_ratio > m_SP_threshold){
       m_calibrate_SP = false;
-      std::async(std::launch::async, &IRPhotoCalib::EstimateSpatialParameters, this);
+      std::thread t1(&IRPhotoCalib::EstimateSpatialParameters, this);
+      t1.detach();
     }
   }
 
@@ -347,34 +364,65 @@ void IRPhotoCalib::EstimateSpatialParameters()
   solver.compute(A);
   if(solver.info() != Eigen::Success) {
     // decomposition failed
-    cout << "failed\n";
+    cout << "problem decomposition failed. Will try again\n";
+    m_calibrate_SP = true;
     return;
   }
   Eigen::VectorXd x = solver.solve(b);
   if(solver.info() != Eigen::Success) {
     // solving failed
-    cout << "failed 2\n";
+    cout << "failed to solve the linear problem. Will try again\n";
+    m_calibrate_SP = true;
     return;
   }
-  m_calibrate_SP = false;
+  Mat coarse_params_PS(cv::Size((int)(m_w/m_div), (int)(m_h/m_div)), CV_32FC1, Scalar(0));
+  for (int i=0; i<variable_to_serial_id.size(); i++){
+    int sid = variable_to_serial_id[i];
+    auto xy = getInvNid(sid);
+    coarse_params_PS.at<float>(xy.second, xy.first) = x(i);    
+  }
+  for(int c=0; c<m_w; c++){
+    for(int r=0; r<m_h; r++){
+      m_params_PS.at<float>(r,c) = coarse_params_PS.at<float>((int)(r/m_div), (int)(c/m_div));
+    }
+  }
   cout << "Spatial Params Estimation Done\n";
 }
 
-
-
-float IRPhotoCalib::getCorrected(float o, int x, int y, vector< double >& a, vector< double >& b, vector< double >& s, vector< double >& n, int fid, int w, int h, int div, Mat& imNis, double minn, double maxn)
-{
-  double ai = a[fid]; double bi = b[fid];
-  //double nxy = n[ getNid(x,y,div,w) ];
-  double nxy = (imNis.at<uchar>( (int)std::floor(y/div) , (int)std::floor(x/div)) * (maxn-minn) / 255.0) + minn;
-  float co = o*(ai-bi)+bi-nxy;
-  //if (nxy == 0.000001) return 0.000001;
-  return co;
+Mat IRPhotoCalib::getCorrectedImage(Mat & image, PTAB & PT_params){
+  Mat float_image, corrected_frame, colormap_corrected_frame;
+  image.convertTo(float_image, CV_32FC1, 1/255.0);
+  Mat corrected_float_frame = ((float_image * (float)(PT_params.a-PT_params.b) + (float)PT_params.b) - m_params_PS)*(float)255.0;
+  Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> eigen_image = mapCV2Eigen(corrected_float_frame);
+  auto cyclic_eigen_image = eigen_image.unaryExpr([](const int x) { return x%256; }).cast<float>();
+  Mat cyclic_float_image = mapEigen2CV(cyclic_eigen_image);
+  cyclic_float_image.convertTo(corrected_frame, CV_8UC1, 1);
+  LUT(corrected_frame, m_lut, colormap_corrected_frame); 
+  return colormap_corrected_frame;
 }
 
-float IRPhotoCalib::getGainCorrected(float o, int x, int y, vector< double >& a, vector< double >& b, vector< double >& s, vector< double >& n, int fid, int w, int h, int div)
-{
-  double ai = a[fid]; double bi = b[fid];
-  float co = (o*exp(ai)+bi);
-  return co;
+/*
+Source: https://stackoverflow.com/questions/14783329/opencv-cvmat-and-eigenmatrix/21706778#21706778
+You can map arbitrary matrices between Eigen and OpenCV (without copying data).
+
+You have to be aware of two things though:
+
+ - Eigen defaults to column-major storage, OpenCV stores row-major. Therefore, use the Eigen::RowMajor flag when mapping OpenCV data.
+ - The OpenCV matrix has to be continuous (i.e. ocvMatrix.isContinuous() needs to be true). 
+   This is the case if you allocate the storage for the matrix in one go at the creation of the matrix 
+   (e.g. as in Mat A(20, 20, CV_32FC1), or if the matrix is the result of a operation like Mat W = A.inv();)
+
+For multi-channel matrices (e.g. images), you can use 'Stride' exactly as Pierluigi suggested in his comment!
+** Only works with 32FC1!!**
+*/
+Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> IRPhotoCalib::mapCV2Eigen(Mat & M_OCV){
+  Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > M_Eigen(M_OCV.ptr<float>(), M_OCV.rows, M_OCV.cols);
+  return M_Eigen;
+}
+
+template <typename Derived>
+Mat IRPhotoCalib::mapEigen2CV(const Eigen::MatrixBase<Derived>& M_D_Eigen){
+  Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> M_Eigen = M_D_Eigen;
+  Mat M_OCV(M_Eigen.rows(), M_Eigen.cols(), CV_32FC1, M_Eigen.data());
+  return M_OCV;
 }

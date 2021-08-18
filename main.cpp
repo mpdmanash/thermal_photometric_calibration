@@ -9,7 +9,6 @@
 #include <iostream>
 #include <iomanip>
 
-#include "utils.h"
 #include "irPhotoCalib.h"
 #include<cstdlib>
 #include <time.h>
@@ -29,8 +28,8 @@ using namespace cv;
 
 // Config sets
 const int k_frame_history = 10;
-int k_div = 8;
-float k_SP_threshold = 0.9;
+int k_div = 16;
+float k_SP_threshold = 0.97;
 bool k_calibrate_SP = true;
 int k_max_corres_per_frame = 300; //600 in general, but lesser 20 or 30 for spatial
 int k_max_corres_per_history = 30;
@@ -41,17 +40,18 @@ void ReadCorrespondences(string csv_filename,
                          vector<vector<vector<float> > > & all_intensity_current,
                          vector<vector<int> > & all_history_frame_diffs,
                          vector<vector<vector<pair<int,int> > > > & all_pixels_history,
-                         vector<vector<vector<pair<int,int> > > > & all_pixels_current){
+                         vector<vector<vector<pair<int,int> > > > & all_pixels_current,
+                         vector<int> & all_isKFs){
     all_intensity_history.clear(); all_intensity_current.clear(); all_history_frame_diffs.clear(); all_pixels_history.clear(); all_pixels_current.clear();
     ifstream c_file (csv_filename); string value;
-    int prev_CFID = 1; int columns = 9; int prev_HKFID = -1;
+    int prev_CFID = 1; int columns = 10; int prev_HKFID = -1;
     vector<vector<float> > CFID_intensity_history, CFID_intensity_current;
     vector<vector<pair<int,int> > > CFID_pixels_history, CFID_pixels_current;
     vector<int> CFID_history_frame_diffs;
     vector<float> CFID_HKFID_intensity_history, CFID_HKFID_intensity_current;
     vector<pair<int,int> > CFID_HKFID_pixels_history, CFID_HKFID_pixels_current;
     bool done_all_lines = false;
-    int x_history = 0; int x_current = 0;
+    int x_history = 0; int x_current = 0; int CFID_is_KF = 0;
     while ( c_file.good() ){
         for(int i=0; i<columns-1; i++){
             getline ( c_file, value, ',' );
@@ -73,6 +73,7 @@ void ReadCorrespondences(string csv_filename,
                             all_history_frame_diffs.push_back(CFID_history_frame_diffs);
                             all_pixels_history.push_back(CFID_pixels_history);
                             all_pixels_current.push_back(CFID_pixels_current);
+                            all_isKFs.push_back(CFID_is_KF);
                             CFID_intensity_history.clear(); CFID_intensity_current.clear(); CFID_history_frame_diffs.clear();
                             CFID_pixels_history.clear(); CFID_pixels_current.clear();
                             prev_HKFID=-1;
@@ -108,15 +109,16 @@ void ReadCorrespondences(string csv_filename,
                         CFID_HKFID_intensity_current.push_back(o_current);
                     }
                     break;
-                case 4 : {x_history = (int)round(stof(value)); break;}
-                case 5 :
+                case 4 : {CFID_is_KF = stoi(value);break;}
+                case 5 : {x_history = (int)round(stof(value)); break;}
+                case 6 :
                     {
                         int y_history = (int)round(stof(value));
                         CFID_HKFID_pixels_history.push_back(make_pair(x_history, y_history));
                     }
                     break;
-                case 6 : {x_current = (int)round(stof(value)); break;}
-                case 7 :
+                case 7 : {x_current = (int)round(stof(value)); break;}
+                case 8 :
                     {
                         int y_current = (int)round(stof(value));
                         CFID_HKFID_pixels_current.push_back(make_pair(x_current, y_current));
@@ -136,6 +138,7 @@ void ReadCorrespondences(string csv_filename,
             all_history_frame_diffs.push_back(CFID_history_frame_diffs);
             all_pixels_history.push_back(CFID_pixels_history);
             all_pixels_current.push_back(CFID_pixels_current);
+            all_isKFs.push_back(CFID_is_KF);
         }
     }
 }
@@ -171,9 +174,9 @@ int main(int argc, char **argv){
 
     // ===== Read Correspondences
     vector<vector<vector<float> > > all_intensity_history, all_intensity_current;
-    vector<vector<int> > all_history_frame_diffs;
+    vector<vector<int> > all_history_frame_diffs; vector<int> all_isKFs;
     vector<vector<vector<pair<int,int> > > > all_pixels_history, all_pixels_current;
-    ReadCorrespondences(correspondence_path, all_intensity_history, all_intensity_current, all_history_frame_diffs, all_pixels_history, all_pixels_current);
+    ReadCorrespondences(correspondence_path, all_intensity_history, all_intensity_current, all_history_frame_diffs, all_pixels_history, all_pixels_current, all_isKFs);
 
     // ===== Setup for IRPC =================================================
     IRPhotoCalib * calib;
@@ -185,10 +188,10 @@ int main(int argc, char **argv){
         cvtColor(frame_3, frame, CV_BGR2GRAY);        
         if (frame_counter>=1){
             PTAB current_params = calib->ProcessCurrentFrame(all_intensity_history[frame_counter-1], all_intensity_current[frame_counter-1], all_history_frame_diffs[frame_counter-1],
-                                                             all_pixels_history[frame_counter-1], all_pixels_current[frame_counter-1], frame.cols);
-            corrected_frame = frame * (current_params.a-current_params.b) + current_params.b;
+                                                             all_pixels_history[frame_counter-1], all_pixels_current[frame_counter-1], (bool)all_isKFs[frame_counter-1]);
+            corrected_frame = calib->getCorrectedImage(frame, current_params);
         }
-        else {corrected_frame = frame.clone(); calib = new IRPhotoCalib(frame.cols,frame.rows,k_div,k_calibrate_SP,k_SP_threshold,false);}
+        else {corrected_frame = frame.clone(); calib = new IRPhotoCalib(frame.cols,frame.rows,k_div,k_calibrate_SP,k_SP_threshold,true);}
         hconcat(frame, corrected_frame, res);
         imshow(video_name, res);
         waitKey(1);
