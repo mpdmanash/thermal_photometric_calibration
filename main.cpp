@@ -187,9 +187,14 @@ int main(int argc, char **argv){
         if(frame_3.empty()) continue;
         cvtColor(frame_3, frame, CV_BGR2GRAY);        
         if (frame_counter>=1){
+            TickMeter tm;
+            tm.start();
             PTAB current_params = calib->ProcessCurrentFrame(all_intensity_history[frame_counter-1], all_intensity_current[frame_counter-1], all_history_frame_diffs[frame_counter-1],
                                                              all_pixels_history[frame_counter-1], all_pixels_current[frame_counter-1], (bool)all_isKFs[frame_counter-1]);
             corrected_frame = calib->getCorrectedImage(frame, current_params);
+            tm.stop();
+            float fps = 1. / tm.getTimeSec();
+            // cout << fps << " FPS\n";
         }
         else {corrected_frame = frame.clone(); calib = new IRPhotoCalib(frame.cols,frame.rows,k_div,k_calibrate_SP,k_SP_threshold,true);}
         hconcat(frame, corrected_frame, res);
