@@ -26,7 +26,7 @@ $ cd thermal_photometric_calibration/build
 $ OMP_NUM_THREADS=4 ./main <path to the downloaded video file> <path to the correspondence file>
 ```
 ### Feature Tracker
-- [ ] Implement Gaussian Process for Spatial Parameters 
+- [x] Implement Gaussian Process for Spatial Parameters 
 - [x] Implement OpemMP to parallely process each history frame
 
 ## Publication

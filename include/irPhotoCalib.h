@@ -30,6 +30,7 @@
 #include <iterator>
 #include <string>
 #include <thread>
+#include "gaussian_process_regression.h"
 
 typedef Eigen::SparseMatrix<double, Eigen::ColMajor> SpMat;
 typedef Eigen::Triplet<double> T;
@@ -64,7 +65,7 @@ private:
     vector<int> m_KF_ids;
     int m_latest_KF_id, m_frame_id, m_div, m_w, m_h;
     double m_epsilon_gap, m_epsilon_base;
-    float m_SP_threshold;
+    float m_SP_threshold, m_GP_length_scale, m_GP_sigma_f, m_GP_sigma_n;
     Mat m_spatial_coverage, m_params_PS, m_lut;
     PTAB getPrevAB();
     int getNid(int ptx, int pty);

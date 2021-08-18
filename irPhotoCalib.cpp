@@ -132,6 +132,7 @@ IRPhotoCalib::IRPhotoCalib(int w, int h, int k_div, float k_calibrate_SP, float 
     else if(i==128) m_lut.at<uchar>(0,i) = (uchar)255;
     else m_lut.at<uchar>(0,i) = (uchar)(512-2*i);
   }
+  m_GP_length_scale = 5; m_GP_sigma_f = 0.01; m_GP_sigma_n = 0.01;
 }
 
 IRPhotoCalib::~IRPhotoCalib()
@@ -376,11 +377,23 @@ void IRPhotoCalib::EstimateSpatialParameters()
     m_calibrate_SP = true;
     return;
   }
+  GaussianProcessRegression<float> PS_GPR(2, 1);
+  PS_GPR.SetHyperParams(m_GP_length_scale, m_GP_sigma_f, m_GP_sigma_n);
+  Eigen::VectorXf train_input(2);
+  Eigen::VectorXf train_output(1);
   Mat coarse_params_PS(cv::Size((int)(m_w/m_div), (int)(m_h/m_div)), CV_32FC1, Scalar(0));
   for (int i=0; i<variable_to_serial_id.size(); i++){
     int sid = variable_to_serial_id[i];
     auto xy = getInvNid(sid);
-    coarse_params_PS.at<float>(xy.second, xy.first) = x(i);    
+    train_input << (float)xy.first, (float)xy.second; train_output << (float)x(i);
+    PS_GPR.AddTrainingData(train_input,train_output);
+  }
+  for(int c=0; c<coarse_params_PS.cols; c++){
+    for(int r=0; r<coarse_params_PS.rows; r++){
+      train_input << (float)c, (float)r;
+      train_output = PS_GPR.DoRegression(train_input);
+      coarse_params_PS.at<float>(r, c) = train_output(0);
+    }
   }
   for(int c=0; c<m_w; c++){
     for(int r=0; r<m_h; r++){
