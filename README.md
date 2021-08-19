@@ -27,7 +27,8 @@ $ OMP_NUM_THREADS=4 ./main <path to the downloaded video file> <path to the corr
 ```
 ### Feature Tracker
 - [x] Implement Gaussian Process for Spatial Parameters 
-- [x] Implement OpemMP to parallely process each history frame
+- [x] Implement OpenMP to parallely process each history frame
+- [ ] Add assertions to check user input and prevent bad memory access
 
 ## Publication
 If you use this code in an academic context, please cite the following [RAL-ICRA 2021 paper](https://ieeexplore.ieee.org/document/93611249).
