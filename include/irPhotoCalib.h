@@ -1,5 +1,5 @@
 /*
- * Author: Manash Pratim Das (mpdmanash@iitkgp.ac.in) 
+ * Author: Manash Pratim Das (mpdmanash@cmu.edu) 
  */
 
 #ifndef IRPHOTOCALIB_H
