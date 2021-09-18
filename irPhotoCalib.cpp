@@ -408,9 +408,9 @@ void IRPhotoCalib::EstimateSpatialParameters()
 Mat IRPhotoCalib::getCorrectedImage(Mat & image, PTAB & PT_params){
   Mat float_image, corrected_frame, colormap_corrected_frame;
   image.convertTo(float_image, CV_32FC1, 1/255.0);
-  if(m_calibrate_SP)m_mutex.lock();
+  m_mutex.lock();
   Mat corrected_float_frame = ((float_image * (float)(PT_params.a-PT_params.b) + (float)PT_params.b) - m_params_PS)*(float)255.0;
-  if(m_calibrate_SP)m_mutex.unlock();
+  m_mutex.unlock();
   Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> eigen_image = mapCV2Eigen(corrected_float_frame);
   auto cyclic_eigen_image = eigen_image.unaryExpr([](const int x) { return x%256; }).cast<float>();
   Mat cyclic_float_image = mapEigen2CV(cyclic_eigen_image);
