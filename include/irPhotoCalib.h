@@ -31,6 +31,7 @@
 #include <string>
 #include <thread>
 #include "gaussian_process_regression.h"
+#include <mutex>
 
 typedef Eigen::SparseMatrix<double, Eigen::ColMajor> SpMat;
 typedef Eigen::Triplet<double> T;
@@ -78,6 +79,8 @@ private:
     // Spatial Parameters
     vector<double> m_SP_vecB;
     vector<int> m_SP_correscount, m_sids_history, m_sids_current; int m_SP_max_correscount;
+
+    std::mutex m_mutex;
 };
 
 #endif

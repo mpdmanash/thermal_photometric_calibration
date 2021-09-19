@@ -395,18 +395,22 @@ void IRPhotoCalib::EstimateSpatialParameters()
       coarse_params_PS.at<float>(r, c) = train_output(0);
     }
   }
+  m_mutex.lock();
   for(int c=0; c<m_w; c++){
     for(int r=0; r<m_h; r++){
       m_params_PS.at<float>(r,c) = coarse_params_PS.at<float>((int)(r/m_div), (int)(c/m_div));
     }
   }
+  m_mutex.unlock();
   cout << "Spatial Params Estimation Done\n";
 }
 
 Mat IRPhotoCalib::getCorrectedImage(Mat & image, PTAB & PT_params){
   Mat float_image, corrected_frame, colormap_corrected_frame;
   image.convertTo(float_image, CV_32FC1, 1/255.0);
+  m_mutex.lock();
   Mat corrected_float_frame = ((float_image * (float)(PT_params.a-PT_params.b) + (float)PT_params.b) - m_params_PS)*(float)255.0;
+  m_mutex.unlock();
   Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> eigen_image = mapCV2Eigen(corrected_float_frame);
   auto cyclic_eigen_image = eigen_image.unaryExpr([](const int x) { return x%256; }).cast<float>();
   Mat cyclic_float_image = mapEigen2CV(cyclic_eigen_image);
