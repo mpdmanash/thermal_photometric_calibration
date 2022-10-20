@@ -31,7 +31,7 @@ $ OMP_NUM_THREADS=4 ./main <path to the downloaded video file> <path to the corr
 - [ ] Add assertions to check user input and prevent bad memory access
 
 ## Publication
-If you use this code in an academic context, please cite the following [RAL-ICRA 2021 paper](https://ieeexplore.ieee.org/document/93611249).
+If you use this code in an academic context, please cite the following [RAL-ICRA 2021 paper](https://doi.org/10.1109/LRA.2021.3061401).
 Manash Pratim Das, Larry Matthies, Shreyansh Daftry: **Online Photometric Calibration of Automatic Gain Thermal Infrared Cameras**, IEEE Robotics and Automation Letters 6.2 (2021): 2453-2460.
 
 ```
